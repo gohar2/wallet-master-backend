@@ -211,6 +211,7 @@ export async function registerRoutes(app) {
         }
       }
 
+      console.log(user, "This is the user object to be stored in session");
       // Store user in session
       req.session.userId = user.id;
       req.session.user = user;
@@ -475,6 +476,8 @@ export async function registerRoutes(app) {
 
 // Middleware to require authentication
 function requireAuth(req, res, next) {
+  console.log("req.session", req.session);
+
   if (!req.session.userId || !req.session.user) {
     return res.status(401).json({
       message: "Authentication required. Please log in.",

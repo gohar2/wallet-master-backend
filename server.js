@@ -1,3 +1,4 @@
+// server.js - Fixed CORS and session configuration
 import express from "express";
 import cors from "cors";
 import session from "express-session";
@@ -10,24 +11,28 @@ const PORT = process.env.PORT || 3001;
 // Session store
 const MemoryStoreSession = MemoryStore(session);
 
-// CORS configuration for Google Auth
+// CORS configuration - Fixed for both localhost and 127.0.0.1
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests from your frontend origins
     const allowedOrigins = [
-      "http://localhost:5173", // Vite dev server (your current setup)
-      "http://localhost:3000", // React dev server alternative
-      "http://localhost:8080", // Alternative dev port
-      "https://yourdomain.com", // Production domain (replace with actual)
+      "http://localhost:5173",
+      "http://127.0.0.1:5173", // Fixed: ensure this is included
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://localhost:3001",
+      "http://127.0.0.1:3001",
+      "https://yourdomain.com",
     ];
 
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
+      console.log(`✅ CORS allowed for origin: ${origin}`);
       callback(null, true);
     } else {
-      console.warn(`CORS blocked origin: ${origin}`);
+      console.warn(`❌ CORS blocked origin: ${origin}`);
+      console.log(`Allowed origins: ${allowedOrigins.join(", ")}`);
       callback(new Error("Not allowed by CORS"));
     }
   },
@@ -44,7 +49,7 @@ const corsOptions = {
   ],
   exposedHeaders: ["Content-Length", "X-Foo", "X-Bar"],
   maxAge: 86400, // 24 hours - cache preflight responses
-  optionsSuccessStatus: 200, // Some legacy browsers choke on 204
+  optionsSuccessStatus: 200,
 };
 
 // Apply CORS middleware
@@ -53,15 +58,11 @@ app.use(cors(corsOptions));
 // Handle preflight requests explicitly
 app.options("*", cors(corsOptions));
 
-// Additional security headers for Google OAuth
+// Additional security headers
 app.use((req, res, next) => {
-  // Allow popups for Google OAuth
   res.header("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   res.header("Cross-Origin-Embedder-Policy", "unsafe-none");
-
-  // Referrer policy for better security
   res.header("Referrer-Policy", "strict-origin-when-cross-origin");
-
   next();
 });
 
@@ -69,30 +70,32 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Session configuration
+// Session configuration - Fixed for both localhost and 127.0.0.1
 app.use(
   session({
     cookie: {
       maxAge: 86400000, // 24 hours
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // Auto-set based on environment
-      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax", // More permissive in dev
+      domain: process.env.NODE_ENV === "production" ? undefined : undefined, // Don't set domain in dev
     },
     store: new MemoryStoreSession({
-      checkPeriod: 86400000, // prune expired entries every 24h
+      checkPeriod: 86400000,
     }),
     secret: process.env.SESSION_SECRET || "your-secret-key-here",
     resave: false,
     saveUninitialized: false,
+    name: "sessionId", // Custom session name
   })
 );
 
-// Request logging middleware (helpful for debugging)
+// Enhanced request logging middleware
 app.use((req, res, next) => {
   console.log(
     `${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${
       req.headers.origin || "none"
-    }`
+    } - Session: ${req.session?.userId ? "✅" : "❌"}`
   );
   next();
 });
@@ -100,21 +103,28 @@ app.use((req, res, next) => {
 // Register API routes
 await registerRoutes(app);
 
-// Health check
+// Enhanced health check
 app.get("/health", (req, res) => {
   res.json({
     status: "OK",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
     cors: {
-      allowedOrigins: corsOptions.origin.toString().includes("function")
-        ? "Dynamic"
-        : corsOptions.origin,
+      allowedOrigins: [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+      ],
+    },
+    session: {
+      configured: true,
+      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
     },
   });
 });
 
-// Error handling middleware for CORS
+// Enhanced error handling middleware
 app.use((error, req, res, next) => {
   console.error("Server error:", error);
 
@@ -127,6 +137,7 @@ app.use((error, req, res, next) => {
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
+        "http://127.0.0.1:3000",
       ],
     });
   }
@@ -146,8 +157,12 @@ app.use("*", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`CORS enabled for: http://localhost:5173, http://localhost:3000`);
-  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(`🚀 Backend server running on port ${PORT}`);
+  console.log(`📍 Health check: http://localhost:${PORT}/health`);
+  console.log(`🌐 CORS enabled for:`);
+  console.log(`   - http://localhost:5173`);
+  console.log(`   - http://127.0.0.1:5173`);
+  console.log(`   - http://localhost:3000`);
+  console.log(`   - http://127.0.0.1:3000`);
+  console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
 });
