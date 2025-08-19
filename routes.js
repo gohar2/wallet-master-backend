@@ -6,6 +6,14 @@ import {
   googleAuthSchema,
   walletUpdateSchema,
 } from "./schema.js";
+import {
+  signAuthToken,
+  setAuthCookie,
+  clearAuthCookie,
+  requireAuth,
+  getTokenFromRequest,
+  verifyAuthToken,
+} from "./auth.js";
 
 export async function registerRoutes(app) {
   // Google OAuth login/register
@@ -101,7 +109,9 @@ export async function registerRoutes(app) {
             });
           }
 
-          const payload = JSON.parse(atob(tokenParts[1]));
+          const payload = JSON.parse(
+            Buffer.from(tokenParts[1], "base64").toString()
+          );
 
           // Basic validation
           if (!payload.sub || !payload.email) {
@@ -174,8 +184,8 @@ export async function registerRoutes(app) {
           const newUser = insertUserSchema.parse({
             email: googleUser.email,
             googleId: googleUser.id,
-            name: googleUser.name || googleUser.email.split("@")[0], // Fallback name
-            walletAddress: undefined, // Will be set later when wallet is created
+            name: googleUser.name || googleUser.email.split("@")[0],
+            walletAddress: undefined,
           });
 
           user = await storage.createUser(newUser);
@@ -197,34 +207,32 @@ export async function registerRoutes(app) {
           });
         }
       } else {
-        // Update existing user with latest info from Google if needed
         try {
           console.log("User already exists, using existing data:", user.id);
-          // Note: In your MemStorage, you might want to add an updateUser method
-          // For now, we'll just use the existing user data
         } catch (updateError) {
           console.warn(
             "Note: Could not update existing user data:",
             updateError
           );
-          // Don't fail the request, just log and continue
         }
       }
 
-      console.log(user, "This is the user object to be stored in session");
-      // Store user in session
-      req.session.userId = user.id;
-      req.session.user = user;
+      // Issue JWT and set cookie
+      const token = signAuthToken({
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+      });
+      setAuthCookie(res, token);
 
       // Return success response
       res.json({
         message: "Authentication successful",
-        ...user, // Return the full user object as your frontend expects
+        ...user,
       });
     } catch (error) {
       console.error("Unexpected error in Google auth:", error);
 
-      // Handle different types of errors
       if (error.name === "ZodError") {
         return res.status(400).json({
           message:
@@ -234,7 +242,6 @@ export async function registerRoutes(app) {
         });
       }
 
-      // Generic error fallback
       res.status(500).json({
         message:
           "Authentication service temporarily unavailable. Please try again later.",
@@ -246,43 +253,38 @@ export async function registerRoutes(app) {
   });
 
   // Session validation endpoint
-  app.get("/api/auth/validate", (req, res) => {
-    if (!req.session.userId || !req.session.user) {
+  app.get("/api/auth/validate", async (req, res) => {
+    const token = getTokenFromRequest(req);
+    const decoded = token ? verifyAuthToken(token) : null;
+    if (!decoded) {
       return res.status(401).json({
         message: "No valid session found",
         error: "NOT_AUTHENTICATED",
       });
     }
 
+    const user = await storage.getUser(decoded.userId);
     res.json({
       valid: true,
-      user: req.session.user,
+      user: user || {
+        id: decoded.userId,
+        email: decoded.email,
+        name: decoded.name,
+        walletAddress: undefined,
+      },
     });
   });
 
   // Logout endpoint
   app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy((err) => {
-      if (err) {
-        console.error("Session destruction error:", err);
-        return res.status(500).json({
-          message: "Failed to logout properly",
-          error: "LOGOUT_ERROR",
-        });
-      }
-
-      res.clearCookie("connect.sid"); // Clear session cookie
-      res.json({
-        message: "Logged out successfully",
-      });
-    });
+    clearAuthCookie(res);
+    res.json({ message: "Logged out successfully" });
   });
 
   // Get current user (useful for frontend)
   app.get("/api/auth/me", requireAuth, async (req, res) => {
     try {
-      // Get fresh user data from storage
-      const user = await storage.getUser(req.session.userId);
+      const user = await storage.getUser(req.auth.userId);
       if (!user) {
         return res.status(404).json({
           message: "User not found",
@@ -306,7 +308,7 @@ export async function registerRoutes(app) {
       const { id } = req.params;
 
       // Check if user can update this wallet
-      if (req.session.user.id !== id) {
+      if (req.auth.userId !== id) {
         return res.status(403).json({
           message: "You can only update your own wallet",
           error: "ACCESS_DENIED",
@@ -322,9 +324,6 @@ export async function registerRoutes(app) {
           error: "USER_NOT_FOUND",
         });
       }
-
-      // Update session
-      req.session.user = user;
 
       res.json(user);
     } catch (error) {
@@ -351,7 +350,7 @@ export async function registerRoutes(app) {
       const { id } = req.params;
 
       // Check if user can access these transactions
-      if (req.session.user.id !== id) {
+      if (req.auth.userId !== id) {
         return res.status(403).json({
           message: "You can only access your own transactions",
           error: "ACCESS_DENIED",
@@ -374,7 +373,7 @@ export async function registerRoutes(app) {
     try {
       const transactionData = insertTransactionSchema.parse({
         ...req.body,
-        userId: req.session.user.id, // Ensure transaction belongs to authenticated user
+        userId: req.auth.userId,
       });
 
       const transaction = await storage.createTransaction(transactionData);
@@ -411,7 +410,7 @@ export async function registerRoutes(app) {
         });
       }
 
-      if (existingTransaction.userId !== req.session.user.id) {
+      if (existingTransaction.userId !== req.auth.userId) {
         return res.status(403).json({
           message: "You can only update your own transactions",
           error: "ACCESS_DENIED",
@@ -454,7 +453,7 @@ export async function registerRoutes(app) {
       }
 
       // Check if transaction belongs to user
-      if (transaction.userId !== req.session.user.id) {
+      if (transaction.userId !== req.auth.userId) {
         return res.status(403).json({
           message: "You can only access your own transactions",
           error: "ACCESS_DENIED",
@@ -474,15 +473,4 @@ export async function registerRoutes(app) {
   return app;
 }
 
-// Middleware to require authentication
-function requireAuth(req, res, next) {
-  console.log("req.session", req.session);
-
-  if (!req.session.userId || !req.session.user) {
-    return res.status(401).json({
-      message: "Authentication required. Please log in.",
-      error: "AUTHENTICATION_REQUIRED",
-    });
-  }
-  next();
-}
+// Removed session-based requireAuth in favor of JWT-based version from auth.js

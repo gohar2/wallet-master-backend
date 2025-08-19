@@ -9,18 +9,21 @@
     "dev": "node --watch server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["web3", "zerodev", "gasless", "transactions", "google-oauth"],
+  "keywords": [
+    "web3",
+    "zerodev",
+    "gasless",
+    "transactions",
+    "google-oauth"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "express-session": "^1.17.3",
-    "connect-pg-simple": "^9.0.1",
-    "memorystore": "^1.6.7",
-    "passport": "^0.7.0",
-    "passport-local": "^1.0.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "jsonwebtoken": "^9.0.2",
+    "cookie": "^0.6.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

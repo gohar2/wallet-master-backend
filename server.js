@@ -1,29 +1,30 @@
-// server.js - Fixed CORS and session configuration
+// server.js - Stateless JWT auth configuration
 import express from "express";
 import cors from "cors";
-import session from "express-session";
-import MemoryStore from "memorystore";
 import { registerRoutes } from "./routes.js";
+import { authMiddleware } from "./auth.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Session store
-const MemoryStoreSession = MemoryStore(session);
+// CORS configuration - supports env-configured origins
+const envOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
+  "https://yourdomain.com",
+  ...envOrigins,
+];
 
-// CORS configuration - Fixed for both localhost and 127.0.0.1
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173", // Fixed: ensure this is included
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "http://localhost:3001",
-      "http://127.0.0.1:3001",
-      "https://yourdomain.com",
-    ];
-
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
 
@@ -36,7 +37,7 @@ const corsOptions = {
       callback(new Error("Not allowed by CORS"));
     }
   },
-  credentials: true, // Essential for cookies/auth
+  credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: [
     "Content-Type",
@@ -48,7 +49,7 @@ const corsOptions = {
     "Access-Control-Request-Headers",
   ],
   exposedHeaders: ["Content-Length", "X-Foo", "X-Bar"],
-  maxAge: 86400, // 24 hours - cache preflight responses
+  maxAge: 86400,
   optionsSuccessStatus: 200,
 };
 
@@ -70,32 +71,15 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Session configuration - Fixed for both localhost and 127.0.0.1
-app.use(
-  session({
-    cookie: {
-      maxAge: 86400000, // 24 hours
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax", // More permissive in dev
-      domain: process.env.NODE_ENV === "production" ? undefined : undefined, // Don't set domain in dev
-    },
-    store: new MemoryStoreSession({
-      checkPeriod: 86400000,
-    }),
-    secret: process.env.SESSION_SECRET || "your-secret-key-here",
-    resave: false,
-    saveUninitialized: false,
-    name: "sessionId", // Custom session name
-  })
-);
+// JWT auth middleware (stateless)
+app.use(authMiddleware);
 
 // Enhanced request logging middleware
 app.use((req, res, next) => {
   console.log(
     `${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${
       req.headers.origin || "none"
-    } - Session: ${req.session?.userId ? "✅" : "❌"}`
+    } - Auth: ${req.auth?.userId ? "✅" : "❌"}`
   );
   next();
 });
@@ -109,18 +93,7 @@ app.get("/health", (req, res) => {
     status: "OK",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
-    cors: {
-      allowedOrigins: [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-      ],
-    },
-    session: {
-      configured: true,
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-    },
+    cors: { allowedOrigins },
   });
 });
 
@@ -133,12 +106,7 @@ app.use((error, req, res, next) => {
       error: "CORS_ERROR",
       message: "Cross-origin request not allowed",
       details: `Origin '${req.headers.origin}' is not authorized to access this API`,
-      allowedOrigins: [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-      ],
+      allowedOrigins,
     });
   }
 
@@ -160,9 +128,8 @@ app.listen(PORT, () => {
   console.log(`🚀 Backend server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
   console.log(`🌐 CORS enabled for:`);
-  console.log(`   - http://localhost:5173`);
-  console.log(`   - http://127.0.0.1:5173`);
-  console.log(`   - http://localhost:3000`);
-  console.log(`   - http://127.0.0.1:3000`);
+  for (const origin of allowedOrigins) {
+    console.log(`   - ${origin}`);
+  }
   console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
 });
