@@ -44,14 +44,15 @@ export const insertTransactionSchema = z.object({
   recipient: z.string(),
   amount: z.string(),
   tokenSymbol: z.string().default("USDC"),
+  data: z.string().optional(),
   batchOperations: z.any().optional(),
 });
 
 export const updateTransactionSchema = z
   .object({
-    status: z.enum(["pending", "success", "failed"]).optional(),
+    status: z.enum(["pending", "processing", "completed", "failed"]).optional(),
     hash: z.string().optional(),
-    errorMessage: z.string().optional(),
+    error: z.string().optional(),
   })
   .partial();
 

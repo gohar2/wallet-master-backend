@@ -90,12 +90,31 @@ export class MongoStorage {
 
   async createTransaction(insertTransaction) {
     try {
-      const transaction = new Transaction({
-        ...insertTransaction,
+      console.log("Creating transaction with data:", insertTransaction);
+
+      // Map frontend fields to MongoDB schema fields
+      const transactionData = {
+        userId: insertTransaction.userId,
+        to: insertTransaction.recipient, // Map recipient to 'to'
+        data: insertTransaction.data || "0x", // Use provided data or default
+        value: insertTransaction.amount || "0", // Map amount to 'value'
         status: "pending",
         gasless: true,
-      });
-      return await transaction.save();
+        // Store additional fields as metadata if needed
+        metadata: {
+          type: insertTransaction.type,
+          tokenSymbol: insertTransaction.tokenSymbol,
+          batchOperations: insertTransaction.batchOperations,
+        },
+      };
+
+      console.log("Mapped transaction data:", transactionData);
+
+      const transaction = new Transaction(transactionData);
+      const savedTransaction = await transaction.save();
+
+      console.log("Transaction created successfully:", savedTransaction);
+      return savedTransaction;
     } catch (error) {
       console.error("Error creating transaction:", error);
       throw error;
