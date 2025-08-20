@@ -302,7 +302,114 @@ export async function registerRoutes(app) {
     }
   });
 
-  // Update user wallet address
+  // Get current user profile
+  app.get("/api/user/profile", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.auth.userId);
+      if (!user) {
+        return res.status(404).json({
+          message: "User not found",
+          error: "USER_NOT_FOUND",
+        });
+      }
+
+      res.json(user);
+    } catch (error) {
+      console.error("Get user profile error:", error);
+      res.status(500).json({
+        message: "Failed to get user profile",
+        error: "FETCH_ERROR",
+      });
+    }
+  });
+
+  // Get current user's transactions
+  app.get("/api/user/transactions", requireAuth, async (req, res) => {
+    try {
+      const transactions = await storage.getTransactionsByUserId(
+        req.auth.userId
+      );
+      res.json(transactions);
+    } catch (error) {
+      console.error("Get user transactions error:", error);
+      res.status(500).json({
+        message: "Failed to get transactions",
+        error: "FETCH_ERROR",
+      });
+    }
+  });
+
+  // Update user wallet address (singular - uses authenticated user's ID)
+  app.put("/api/user/wallet", requireAuth, async (req, res) => {
+    try {
+      const { walletAddress } = walletUpdateSchema.parse(req.body);
+
+      const user = await storage.updateUserWallet(
+        req.auth.userId,
+        walletAddress
+      );
+      if (!user) {
+        return res.status(404).json({
+          message: "User not found",
+          error: "USER_NOT_FOUND",
+        });
+      }
+
+      res.json(user);
+    } catch (error) {
+      console.error("Wallet update error:", error);
+
+      if (error.name === "ZodError") {
+        return res.status(400).json({
+          message: "Invalid wallet address format",
+          error: "VALIDATION_ERROR",
+          details: error.errors,
+        });
+      }
+
+      res.status(500).json({
+        message: "Failed to update wallet",
+        error: "UPDATE_ERROR",
+      });
+    }
+  });
+
+  // Update user wallet address (singular - PATCH method)
+  app.patch("/api/user/wallet", requireAuth, async (req, res) => {
+    try {
+      const { walletAddress } = walletUpdateSchema.parse(req.body);
+
+      const user = await storage.updateUserWallet(
+        req.auth.userId,
+        walletAddress
+      );
+      if (!user) {
+        return res.status(404).json({
+          message: "User not found",
+          error: "USER_NOT_FOUND",
+        });
+      }
+
+      res.json(user);
+    } catch (error) {
+      console.error("Wallet update error:", error);
+
+      if (error.name === "ZodError") {
+        return res.status(400).json({
+          message: "Invalid wallet address format",
+          error: "VALIDATION_ERROR",
+          details: error.errors,
+        });
+      }
+
+      res.status(500).json({
+        message: "Failed to update wallet",
+        error: "UPDATE_ERROR",
+      });
+    }
+  });
+
+  // Update user wallet address (plural with ID parameter)
   app.patch("/api/users/:id/wallet", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;

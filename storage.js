@@ -1,95 +1,119 @@
-import { randomUUID } from "crypto";
+import { User } from "./models/User.js";
+import { Transaction } from "./models/Transaction.js";
 
-export class MemStorage {
-  constructor() {
-    this.users = new Map();
-    this.transactions = new Map();
-  }
-
+export class MongoStorage {
   async getUser(id) {
-    return this.users.get(id);
+    try {
+      return await User.findById(id);
+    } catch (error) {
+      console.error("Error getting user by ID:", error);
+      return null;
+    }
   }
 
   async getUserByEmail(email) {
-    return Array.from(this.users.values()).find((user) => user.email === email);
+    try {
+      return await User.findOne({ email: email.toLowerCase() });
+    } catch (error) {
+      console.error("Error getting user by email:", error);
+      return null;
+    }
   }
 
   async getUserByGoogleId(googleId) {
-    return Array.from(this.users.values()).find(
-      (user) => user.googleId === googleId
-    );
+    try {
+      return await User.findOne({ googleId });
+    } catch (error) {
+      console.error("Error getting user by Google ID:", error);
+      return null;
+    }
   }
 
   async createUser(insertUser) {
-    const id = randomUUID();
-    const user = {
-      ...insertUser,
-      id,
-      createdAt: new Date(),
-    };
-    this.users.set(id, user);
-    return user;
+    try {
+      const user = new User({
+        ...insertUser,
+        email: insertUser.email.toLowerCase(),
+      });
+      return await user.save();
+    } catch (error) {
+      console.error("Error creating user:", error);
+      throw error;
+    }
   }
 
   async updateUserWallet(id, walletAddress) {
-    const user = this.users.get(id);
-    if (!user) return undefined;
+    try {
+      return await User.findByIdAndUpdate(
+        id,
+        { walletAddress },
+        { new: true, runValidators: true }
+      );
+    } catch (error) {
+      console.error("Error updating user wallet:", error);
+      return null;
+    }
+  }
 
-    const updatedUser = { ...user, walletAddress };
-    this.users.set(id, updatedUser);
-    return updatedUser;
+  async updateUser(id, updates) {
+    try {
+      return await User.findByIdAndUpdate(
+        id,
+        { ...updates, updatedAt: new Date() },
+        { new: true, runValidators: true }
+      );
+    } catch (error) {
+      console.error("Error updating user:", error);
+      return null;
+    }
   }
 
   async getTransactionsByUserId(userId) {
-    return Array.from(this.transactions.values())
-      .filter((tx) => tx.userId === userId)
-      .sort(
-        (a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0)
-      );
+    try {
+      return await Transaction.find({ userId })
+        .sort({ createdAt: -1 })
+        .populate("userId", "email name");
+    } catch (error) {
+      console.error("Error getting transactions by user ID:", error);
+      return [];
+    }
   }
 
   async getTransaction(id) {
-    return this.transactions.get(id);
+    try {
+      return await Transaction.findById(id).populate("userId", "email name");
+    } catch (error) {
+      console.error("Error getting transaction by ID:", error);
+      return null;
+    }
   }
 
   async createTransaction(insertTransaction) {
-    const id = randomUUID();
-    const transaction = {
-      ...insertTransaction,
-      id,
-      status: "pending",
-      gasless: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    this.transactions.set(id, transaction);
-    return transaction;
+    try {
+      const transaction = new Transaction({
+        ...insertTransaction,
+        status: "pending",
+        gasless: true,
+      });
+      return await transaction.save();
+    } catch (error) {
+      console.error("Error creating transaction:", error);
+      throw error;
+    }
   }
 
   async updateTransaction(id, updates) {
-    const transaction = this.transactions.get(id);
-    if (!transaction) return undefined;
-
-    const updatedTransaction = {
-      ...transaction,
-      ...updates,
-      updatedAt: new Date(),
-    };
-    this.transactions.set(id, updatedTransaction);
-    return updatedTransaction;
-  }
-  async updateUser(id, updates) {
-    const user = this.users.get(id);
-    if (!user) return undefined;
-
-    const updatedUser = {
-      ...user,
-      ...updates,
-      updatedAt: new Date(), // Add this field if you want to track updates
-    };
-    this.users.set(id, updatedUser);
-    return updatedUser;
+    try {
+      return await Transaction.findByIdAndUpdate(
+        id,
+        { ...updates, updatedAt: new Date() },
+        { new: true, runValidators: true }
+      );
+    } catch (error) {
+      console.error("Error updating transaction:", error);
+      return null;
+    }
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new MongoStorage();

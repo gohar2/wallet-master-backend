@@ -1,11 +1,15 @@
+import "dotenv/config"; // This automatically loads .env
 // server.js - Stateless JWT auth configuration
 import express from "express";
 import cors from "cors";
 import { registerRoutes } from "./routes.js";
 import { authMiddleware } from "./auth.js";
-
+import { connectDatabase } from "./database.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Connect to MongoDB
+await connectDatabase();
 
 // CORS configuration - supports env-configured origins
 const envOrigins = (process.env.CORS_ORIGIN || "")
@@ -19,7 +23,7 @@ const allowedOrigins = [
   "http://127.0.0.1:3000",
   "http://localhost:3001",
   "http://127.0.0.1:3001",
-  "https://yourdomain.com",
+  "https://wallet-master-frontend-beta.vercel.app",
   ...envOrigins,
 ];
 

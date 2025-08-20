@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "setup": "node create-env.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -19,11 +20,14 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
+    "cookie": "^0.6.0",
     "cors": "^2.8.5",
-    "zod": "^3.22.4",
+    "dotenv": "^17.2.1",
+    "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "cookie": "^0.6.0"
+    "mongodb": "^6.3.0",
+    "mongoose": "^8.0.3",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

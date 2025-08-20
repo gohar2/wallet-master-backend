@@ -10,6 +10,10 @@ export const userSchema = z.object({
   createdAt: z.date().optional(),
 });
 
+
+
+
+
 export const insertUserSchema = z.object({
   email: z.string().email(),
   googleId: z.string(),
